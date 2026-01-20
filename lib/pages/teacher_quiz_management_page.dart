@@ -722,12 +722,6 @@ class _TeacherQuizManagementPageState extends State<TeacherQuizManagementPage> {
 
   /// 导航到测验详情页面
   void _navigateToQuizDetail(QuizListItem quiz) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('测验详情页面开发中'),
-        duration: Duration(seconds: 2),
-      ),
-    );
     Navigator.push(
       context,
       MaterialPageRoute(

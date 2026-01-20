@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/file_upload_service.dart';
+import 'dart:convert';
 
 /// 创建测验题目页面
 class TeacherQuizQuestionsPage extends StatefulWidget {
@@ -653,11 +655,189 @@ class _TeacherQuizQuestionsPageState extends State<TeacherQuizQuestionsPage> {
 
   /// 导入题目
   void _importQuestions() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('导入题目功能开发中'),
-        duration: Duration(seconds: 2),
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('导入题目', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.upload_file, color: Color(0xFF3B82F6)),
+              title: const Text('从JSON文件导入'),
+              subtitle: const Text('支持标准JSON格式的题目文件'),
+              onTap: () {
+                Navigator.pop(context);
+                _importFromJson();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart, color: Color(0xFF10B981)),
+              title: const Text('从Excel导入'),
+              subtitle: const Text('支持xlsx格式的题目表格'),
+              onTap: () {
+                Navigator.pop(context);
+                _importFromExcel();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.text_snippet, color: Color(0xFFF59E0B)),
+              title: const Text('从文本导入'),
+              subtitle: const Text('手动粘贴题目文本'),
+              onTap: () {
+                Navigator.pop(context);
+                _importFromText();
+              },
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  /// 从JSON文件导入
+  Future<void> _importFromJson() async {
+    try {
+      final file = await FileUploadService.pickSingleFile(
+        allowedExtensions: ['json'],
+      );
+      
+      if (file != null && file.bytes != null) {
+        final jsonStr = utf8.decode(file.bytes!);
+        final List<dynamic> jsonData = json.decode(jsonStr);
+        
+        int importedCount = 0;
+        for (var item in jsonData) {
+          if (item is Map<String, dynamic>) {
+            final question = _parseJsonQuestion(item);
+            if (question != null) {
+              setState(() => _questions.add(question));
+              importedCount++;
+            }
+          }
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('成功导入 $importedCount 道题目'), backgroundColor: const Color(0xFF4CAF50)),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导入失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// 解析JSON题目
+  Map<String, dynamic>? _parseJsonQuestion(Map<String, dynamic> json) {
+    try {
+      final type = json['type'] ?? 'single';
+      final title = json['title'] ?? json['question'] ?? '';
+      final score = json['score'] ?? 5;
+      
+      if (title.isEmpty) return null;
+      
+      if (type == 'judge') {
+        return {
+          'type': 'judge',
+          'title': title,
+          'score': score,
+          'correct': json['correct'] ?? json['answer'] ?? true,
+        };
+      } else {
+        final options = json['options'] ?? [];
+        final correct = json['correct'] ?? json['answer'] ?? [];
+        
+        return {
+          'type': type,
+          'title': title,
+          'score': score,
+          'options': List<String>.from(options),
+          'correct': correct is List ? List<int>.from(correct) : [correct],
+        };
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// 从Excel导入
+  void _importFromExcel() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Excel导入功能开发中，请使用JSON格式导入'), backgroundColor: Colors.orange),
+    );
+  }
+
+  /// 从文本导入
+  void _importFromText() {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('从文本导入'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('请按以下格式输入题目：', style: TextStyle(fontSize: 12, color: Color(0xFF666666))),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(4)),
+                child: const Text(
+                  '1. 题目内容\nA. 选项A\nB. 选项B\nC. 选项C\nD. 选项D\n答案: A',
+                  style: TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: textController,
+                maxLines: 10,
+                decoration: const InputDecoration(
+                  hintText: '在此粘贴题目文本...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _parseTextQuestions(textController.text);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4CAF50)),
+            child: const Text('导入'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 解析文本题目
+  void _parseTextQuestions(String text) {
+    // 简单的文本解析逻辑
+    final lines = text.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    if (lines.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未找到有效题目'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    
+    // 这里可以实现更复杂的解析逻辑
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('文本解析功能开发中，请使用JSON格式导入'), backgroundColor: Colors.orange),
     );
   }
 

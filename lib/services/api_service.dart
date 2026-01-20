@@ -88,14 +88,14 @@ class ApiService {
   /// 获取API基础URL
   static String get baseUrl {
     if (kIsWeb) {
-      // Web平台使用localhost
-      return 'http://localhost:8080';
+      // Web平台使用localhost，后端端口是8081
+      return 'http://localhost:8081';
     } else if (Platform.isAndroid) {
       // Android模拟器使用10.0.2.2访问宿主机
-      return 'http://10.0.2.2:8080';
+      return 'http://10.0.2.2:8081';
     } else {
       // iOS模拟器和其他平台使用localhost
-      return 'http://localhost:8080';
+      return 'http://localhost:8081';
     }
   }
 
@@ -121,6 +121,7 @@ class ApiService {
     dynamic data,
     Options? options,
     Duration? timeout,
+    Function(int, int)? onSendProgress,
   }) async {
     try {
       // 如果指定了超时时间，合并到options中
@@ -136,6 +137,7 @@ class ApiService {
         path,
         data: data,
         options: finalOptions,
+        onSendProgress: onSendProgress,
       );
       return _handleResponse(response);
     } catch (e) {

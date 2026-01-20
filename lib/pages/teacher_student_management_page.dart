@@ -672,25 +672,183 @@ class _TeacherStudentManagementPageState extends State<TeacherStudentManagementP
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('查看详情'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                _showStudentDetail(student);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.message),
               title: const Text('发送消息'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                _sendMessageToStudent(student);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.edit),
               title: const Text('编辑信息'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                _editStudentInfo(student);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
               title: const Text('移除学生', style: TextStyle(color: Colors.red)),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                _removeStudent(student);
+              },
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 显示学生详情
+  void _showStudentDetail(StudentInfo student) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _getAvatarColor(student.name),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Center(
+                child: Text(
+                  student.name.isNotEmpty ? student.name[0] : '?',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(student.name),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailRow('学号', student.studentId),
+              _buildDetailRow('班级', student.className ?? '未知'),
+              _buildDetailRow('邮箱', student.email ?? '未设置'),
+              _buildDetailRow('手机', student.phone ?? '未设置'),
+              const Divider(),
+              const Text('学习情况', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 8),
+              _buildDetailRow('作业完成率', '${student.assignmentCompletionRate ?? 0}%'),
+              _buildDetailRow('测验平均分', '${student.quizAverageScore ?? 0}分'),
+              _buildDetailRow('出勤率', '${student.attendanceRate ?? 0}%'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Color(0xFF666666))),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  /// 发送消息给学生
+  void _sendMessageToStudent(StudentInfo student) {
+    final messageController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('发送消息给 ${student.name}'),
+        content: TextField(
+          controller: messageController,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            hintText: '请输入消息内容...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('消息已发送给 ${student.name}'), backgroundColor: const Color(0xFF4CAF50)),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4CAF50)),
+            child: const Text('发送'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 编辑学生信息
+  void _editStudentInfo(StudentInfo student) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('编辑学生信息功能开发中')),
+    );
+  }
+
+  /// 移除学生
+  void _removeStudent(StudentInfo student) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认移除'),
+        content: Text('确定要将 ${student.name} 从本课程移除吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await _studentService.removeStudentFromCourse(
+                  courseId: int.parse(widget.courseId!),
+                  studentId: int.parse(student.id),
+                );
+                _loadStudentData();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('已移除 ${student.name}'), backgroundColor: const Color(0xFF4CAF50)),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('移除失败: $e'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('确认移除'),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/quiz_models.dart';
 import '../services/quiz_service.dart';
+import 'teacher_quiz_submission_detail_page.dart';
 
 /// 测验详情页面
 class TeacherQuizDetailPage extends StatefulWidget {
@@ -129,7 +130,7 @@ class _TeacherQuizDetailPageState extends State<TeacherQuizDetailPage> {
       
       // 尝试加载overview（可选，失败不影响主流程）
       try {
-        final overview = await _quizService.getTeacherQuizOverview(widget.quizId);
+        final overview = await _quizService.getTeacherQuizOverview();
         setState(() {
           _overview = overview;
         });
@@ -1083,11 +1084,19 @@ class _TeacherQuizDetailPageState extends State<TeacherQuizDetailPage> {
   
   /// 查看答卷
   void _viewAnswerSheet(int submissionId) {
-    // TODO: 导航到答卷详情页
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('查看答卷 ID: $submissionId'),
-        duration: const Duration(seconds: 2),
+    // 获取学生姓名
+    final submission = _submissions.firstWhere(
+      (s) => s.submissionId == submissionId,
+      orElse: () => _submissions.first,
+    );
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TeacherQuizSubmissionDetailPage(
+          submissionId: submissionId,
+          studentName: submission.studentName,
+        ),
       ),
     );
   }

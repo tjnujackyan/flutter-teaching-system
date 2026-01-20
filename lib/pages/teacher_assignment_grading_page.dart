@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/assignment_service.dart';
+import '../services/file_upload_service.dart';
 
 /// 作业批改页面
 class TeacherAssignmentGradingPage extends StatefulWidget {
@@ -198,28 +199,21 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
       final submissionId = submission['id'];
       final submissionIdInt = submissionId is int ? submissionId : int.parse(submissionId.toString());
       
-      // 收集各项评分
-      final grades = <Map<String, dynamic>>[];
-      final criteria = submission['criteria'] as List<dynamic>? ?? [];
+      // 从总分输入框获取分数
+      final key = 'total_$submissionIndex';
+      final totalScoreController = _scoreControllers[key];
+      final totalScore = double.tryParse(totalScoreController?.text ?? '0') ?? 0.0;
       
-      for (final criterion in criteria) {
-        final key = '${submissionIndex}_${criterion['name']}';
-        final controller = _scoreControllers[key];
-        if (controller != null && controller.text.isNotEmpty) {
-          grades.add({
-            'criteriaId': criterion['id'],
-            'score': double.tryParse(controller.text) ?? 0.0,
-            'comment': '',
-          });
-        }
-      }
+      // 从评语输入框获取评语
+      final commentKey = 'comment_$submissionIndex';
+      final commentController = _scoreControllers[commentKey];
+      final comment = commentController?.text ?? '批改完成';
       
       // 构建评分数据
-      final totalScore = _calculateTotalScore(submissionIndex);
       final gradeData = {
-        'totalScore': totalScore.toDouble(),
-        'comment': '批改完成',
-        'grades': grades,
+        'totalScore': totalScore,
+        'comment': comment,
+        'grades': [], // 不再使用评分标准
       };
 
       print('Debug: 提交批改，submissionId: $submissionId (转换为: $submissionIdInt)');
@@ -243,6 +237,8 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
         // 标记为已批改
         setState(() {
           _submissions[_currentStudentIndex]['isGraded'] = true;
+          _submissions[_currentStudentIndex]['score'] = totalScore;
+          _submissions[_currentStudentIndex]['comment'] = comment;
         });
       } else {
         throw Exception(response['message'] ?? '批改失败');
@@ -498,13 +494,13 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
           
           const SizedBox(height: 16),
           
-          // 评分标准
-          _buildGradingCriteria(submission, index),
+          // 总分
+          _buildTotalScore(submission, index),
           
           const SizedBox(height: 16),
           
-          // 总分
-          _buildTotalScore(submission, index),
+          // 评语
+          _buildComment(submission, index),
           
           const SizedBox(height: 100), // 为底部按钮留空间
         ],
@@ -877,6 +873,14 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
 
   /// 构建总分
   Widget _buildTotalScore(Map<String, dynamic> submission, int index) {
+    // 为每个提交创建一个总分控制器
+    final key = 'total_$index';
+    if (!_scoreControllers.containsKey(key)) {
+      final currentScore = submission['score'] ?? 0;
+      _scoreControllers[key] = TextEditingController(text: currentScore.toString());
+    }
+    final totalScoreController = _scoreControllers[key]!;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -906,25 +910,33 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
           
           Row(
             children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(40),
-                  border: Border.all(
-                    color: const Color(0xFF10B981),
-                    width: 2,
+              // 分数输入框
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: totalScoreController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF10B981),
                   ),
-                ),
-                child: Center(
-                  child: Text(
-                    '${_calculateTotalScore(index)}',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF10B981),
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
                     ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF10B981), width: 2),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                   ),
                 ),
               ),
@@ -974,6 +986,68 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
     );
   }
 
+  /// 构建评语
+  Widget _buildComment(Map<String, dynamic> submission, int index) {
+    // 为每个提交创建一个评语控制器
+    final key = 'comment_$index';
+    if (!_scoreControllers.containsKey(key)) {
+      final currentComment = submission['comment'] ?? '';
+      _scoreControllers[key] = TextEditingController(text: currentComment);
+    }
+    final commentController = _scoreControllers[key]!;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '评语',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF333333),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          TextField(
+            controller: commentController,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: '请输入评语...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Color(0xFF3B82F6)),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 计算总分
   int _calculateTotalScore(int index) {
     int total = 0;
@@ -1001,18 +1075,65 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
 
 
   /// 查看文件
-  void _viewFile(Map<String, dynamic> file) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('查看文件：${file['name']}'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _viewFile(Map<String, dynamic> file) async {
+    try {
+      final attachmentId = file['id'];
+      final fileName = file['name'] ?? file['fileName'] ?? 'file';
+      
+      if (attachmentId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('文件ID不存在'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // 下载文件
+      await FileUploadService.downloadAssignmentAttachment(
+        attachmentId: attachmentId,
+        fileName: fileName,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('文件下载成功: $fileName'),
+            backgroundColor: const Color(0xFF4CAF50),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('下载失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   /// 保存评分
   void _saveGrade(int index) async {
-    final total = _calculateTotalScore(index);
+    // 从总分输入框获取分数
+    final key = 'total_$index';
+    final totalScoreController = _scoreControllers[key];
+    final total = int.tryParse(totalScoreController?.text ?? '0') ?? 0;
+    
+    // 验证分数范围
+    final maxScore = _submissions[index]['maxScore'] ?? 100;
+    if (total < 0 || total > maxScore) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('分数必须在 0-$maxScore 之间'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     
     // 先更新本地状态
     setState(() {
@@ -1063,19 +1184,24 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
 
   /// 执行重置
   void _performReset(int index) {
-    final submission = _submissions[index];
+    // 重置总分输入框
+    final scoreKey = 'total_$index';
+    final scoreController = _scoreControllers[scoreKey];
+    if (scoreController != null) {
+      scoreController.text = '0';
+    }
     
-    for (final criterion in (submission['criteria'] as List<dynamic>? ?? [])) {
-      final key = '${index}_${criterion['name']}';
-      final controller = _scoreControllers[key];
-      if (controller != null) {
-        controller.clear();
-      }
+    // 重置评语输入框
+    final commentKey = 'comment_$index';
+    final commentController = _scoreControllers[commentKey];
+    if (commentController != null) {
+      commentController.text = '';
     }
     
     setState(() {
       _submissions[index]['totalScore'] = 0;
       _submissions[index]['isGraded'] = false;
+      _submissions[index]['comment'] = '';
     });
     
     ScaffoldMessenger.of(context).showSnackBar(

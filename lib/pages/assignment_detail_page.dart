@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:io';
 import '../services/api_service.dart';
 import '../services/assignment_service.dart';
+import '../services/file_upload_service.dart';
 
 /// 参考资料模型
 class ReferenceResource {
@@ -54,55 +53,224 @@ class AssignmentDetailPage extends StatefulWidget {
 
 class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
   bool _isSubmitted = false;
-  int _daysLeft = 3;
-  int _totalScore = 100;
-  double _completionRate = 0.85;
+  int _daysLeft = 0;
+  int _totalScore = 0;
+  double _completionRate = 0.0;
   
   List<ReferenceResource> _references = [];
+  Map<String, dynamic>? _assignmentData;
+  bool _isLoading = true;
+  String? _errorMessage;
   
   // 提交相关状态
   final TextEditingController _contentController = TextEditingController();
   bool _isSubmitting = false;
-  List<File> _selectedFiles = [];
+  List<CrossPlatformFile> _selectedFiles = [];
   
   @override
   void initState() {
     super.initState();
-    _initializeReferences();
+    _loadAssignmentDetail();
   }
 
-  /// 初始化参考资料
+  /// 加载作业详情
+  Future<void> _loadAssignmentDetail() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      final token = await ApiService.getAuthToken();
+      if (token == null) {
+        throw Exception('用户未登录');
+      }
+
+      final response = await AssignmentService.getAssignmentDetail(
+        token: token,
+        assignmentId: int.parse(widget.assignmentId),
+      );
+
+      if (response['error'] == 0) {
+        final data = response['body'];
+        print('Debug: 作业详情数据 = $data');
+        print('Debug: attachments = ${data['attachments']}');
+        print('Debug: isSubmitted = ${data['isSubmitted']}');
+        
+        setState(() {
+          _assignmentData = data;
+          _totalScore = data['totalScore'] ?? 100;
+          
+          // 计算剩余天数
+          if (data['deadline'] != null) {
+            final deadline = DateTime.parse(data['deadline']);
+            final now = DateTime.now();
+            _daysLeft = deadline.difference(now).inDays;
+            if (_daysLeft < 0) _daysLeft = 0;
+          }
+          
+          // 解析参考资料
+          if (data['attachments'] != null && data['attachments'] is List) {
+            print('Debug: 开始解析 ${(data['attachments'] as List).length} 个附件');
+            _references = (data['attachments'] as List).map((attachment) {
+              print('Debug: 附件数据 = $attachment');
+              return ReferenceResource(
+                id: attachment['id'].toString(),
+                name: attachment['fileName'] ?? '未知文件',
+                size: _formatFileSize(attachment['fileSize'] ?? 0),
+                uploadTime: _formatUploadTime(attachment['uploadTime']),
+                type: _getResourceType(attachment['fileName'] ?? ''),
+              );
+            }).toList();
+            print('Debug: 解析完成，共 ${_references.length} 个参考资料');
+          } else {
+            print('Debug: attachments 为空或不是列表');
+          }
+          
+          // 检查是否已提交
+          _isSubmitted = data['isSubmitted'] ?? false;
+          print('Debug: _isSubmitted = $_isSubmitted');
+          _completionRate = (data['completionRate'] ?? 0.0) / 100.0;
+          
+          _isLoading = false;
+        });
+      } else {
+        throw Exception(response['message'] ?? '加载失败');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = '加载作业详情失败: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// 格式化文件大小
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  }
+
+  /// 格式化上传时间
+  String _formatUploadTime(String? timeStr) {
+    if (timeStr == null) return '未知时间';
+    try {
+      final time = DateTime.parse(timeStr);
+      final now = DateTime.now();
+      final diff = now.difference(time);
+      
+      if (diff.inDays > 0) return '${diff.inDays}天前上传';
+      if (diff.inHours > 0) return '${diff.inHours}小时前上传';
+      return '刚刚上传';
+    } catch (e) {
+      return '未知时间';
+    }
+  }
+
+  /// 获取资源类型
+  ResourceType _getResourceType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    if (ext == 'pdf') return ResourceType.pdf;
+    if (ext == 'cpp' || ext == 'java' || ext == 'py') return ResourceType.cpp;
+    if (ext == 'mp4' || ext == 'avi' || ext == 'mov') return ResourceType.video;
+    return ResourceType.pdf;
+  }
+
+  /// 初始化参考资料（已废弃，改用API数据）
   void _initializeReferences() {
-    _references = [
-      ReferenceResource(
-        id: '1',
-        name: '数据结构设计指南.pdf',
-        size: '2.5MB',
-        uploadTime: '昨天上传',
-        type: ResourceType.pdf,
-      ),
-      ReferenceResource(
-        id: '2',
-        name: '示例代码模板.cpp',
-        size: '15KB',
-        uploadTime: '3天前上传',
-        type: ResourceType.cpp,
-      ),
-      ReferenceResource(
-        id: '3',
-        name: '链表操作讲解视频',
-        size: '25分钟',
-        uploadTime: '1周前上传',
-        type: ResourceType.video,
-      ),
-    ];
+    // 不再使用静态数据
   }
 
   /// 下载资源
-  void _downloadResource(ReferenceResource resource) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('开始下载：${resource.name}')),
+  Future<void> _downloadResource(ReferenceResource resource) async {
+    // 显示下载进度对话框
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('下载资源'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('正在下载: ${resource.name}'),
+          ],
+        ),
+      ),
     );
+    
+    try {
+      final token = await ApiService.getAuthToken();
+      if (token == null) {
+        throw Exception('用户未登录');
+      }
+
+      // 调用下载服务
+      await FileUploadService.downloadAssignmentAttachment(
+        attachmentId: int.parse(resource.id),
+        fileName: resource.name,
+      );
+      
+      if (mounted) {
+        Navigator.pop(context);
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                SizedBox(width: 8),
+                Text('下载完成'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('文件: ${resource.name}'),
+                const SizedBox(height: 8),
+                const Text('保存位置:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F5F5),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '下载文件夹/智慧教学/',
+                    style: TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '提示: 您可以在浏览器下载管理或系统下载文件夹中找到该文件',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('确定'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('下载失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   /// 播放视频
@@ -134,68 +302,61 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
     if (_isSubmitting) return;
     
     try {
-      print('Debug: [作业提交] 开始提交作业');
-      print('Debug: [作业提交] 作业ID: ${widget.assignmentId}');
-      print('Debug: [作业提交] 内容长度: ${_contentController.text.length}');
-      print('Debug: [作业提交] 文件数量: ${_selectedFiles.length}');
-      
-      setState(() {
-        _isSubmitting = true;
-      });
+      setState(() => _isSubmitting = true);
 
       final token = await ApiService.getAuthToken();
-      
-      print('Debug: [作业提交] Token获取结果: ${token != null ? "成功" : "失败"}');
-      
-      if (token == null) {
-        throw Exception('用户未登录');
-      }
+      if (token == null) throw Exception('用户未登录');
 
-      print('Debug: [作业提交] 调用AssignmentService.submitAssignment');
+      // 先提交作业内容
       final response = await AssignmentService.submitAssignment(
         token: token,
         assignmentId: int.parse(widget.assignmentId),
         content: _contentController.text.isNotEmpty ? _contentController.text : null,
-        files: _selectedFiles,
+        files: null, // 文件单独上传
       );
-
-      print('Debug: [作业提交] API响应: $response');
       
       if (response['error'] == 0) {
-        print('Debug: [作业提交] 提交成功');
+        // 如果有文件，上传文件
+        if (_selectedFiles.isNotEmpty) {
+          for (var file in _selectedFiles) {
+            try {
+              await FileUploadService.uploadSubmissionFile(
+                assignmentId: int.parse(widget.assignmentId),
+                file: file,
+              );
+            } catch (e) {
+              debugPrint('上传文件失败: $e');
+            }
+          }
+        }
       
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('作业提交成功'),
-              backgroundColor: Color(0xFF4CAF50),
+            SnackBar(
+              content: Text(response['body']['message'] ?? '作业提交成功'),
+              backgroundColor: const Color(0xFF4CAF50),
             ),
           );
-          setState(() {
-            _isSubmitted = true;
-          });
+          
+          // 清空选择的文件
+          _selectedFiles.clear();
+          _contentController.clear();
+          
+          // 重新加载作业详情以显示最新提交
+          await _loadAssignmentDetail();
         }
       } else {
-        print('Debug: [作业提交] 提交失败: ${response['message']}');
         throw Exception(response['message'] ?? '提交失败');
       }
     } catch (e) {
-      print('Debug: [作业提交] 捕获异常: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('提交失败: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('提交失败: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -225,29 +386,47 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 作业信息卡片
-            _buildAssignmentInfoCard(),
-            
-            // 统计信息
-            _buildStatsRow(),
-            
-            // 作业要求
-            _buildRequirementsSection(),
-            
-            // 参考资料
-            _buildReferencesSection(),
-            
-            // 我的提交
-            _buildSubmissionSection(),
-            
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(_errorMessage!, style: const TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadAssignmentDetail,
+                        child: const Text('重试'),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 作业信息卡片
+                      _buildAssignmentInfoCard(),
+                      
+                      // 统计信息
+                      _buildStatsRow(),
+                      
+                      // 作业要求
+                      _buildRequirementsSection(),
+                      
+                      // 参考资料（始终显示，即使为空）
+                      _buildReferencesSection(),
+                      
+                      // 我的提交
+                      _buildSubmissionSection(),
+                      
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
     );
   }
 
@@ -421,6 +600,11 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
 
   /// 构建作业要求区域
   Widget _buildRequirementsSection() {
+    final description = _assignmentData?['description'] ?? '暂无作业要求';
+    final deadline = _assignmentData?['deadline'] != null 
+        ? DateTime.parse(_assignmentData!['deadline']).toString().substring(0, 16).replaceAll('T', ' ')
+        : '未设置';
+    
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -459,140 +643,45 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
           
           const SizedBox(height: 16),
           
-          const Text(
-            '题目：设计并实现一个学生成绩管理系统',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF333333),
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          const Text(
-            '要求：',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF333333),
-            ),
-          ),
-          
-          const SizedBox(height: 8),
-          
-          ..._buildRequirementsList(),
-          
-          const SizedBox(height: 16),
-          
-          _buildSubmissionFormat(),
-          
-          const SizedBox(height: 16),
-          
-          _buildDeadline(),
-        ],
-      ),
-    );
-  }
-
-  /// 构建要求列表
-  List<Widget> _buildRequirementsList() {
-    final requirements = [
-      '使用链表或数据库实现学生信息存储',
-      '实现增删改查基本功能',
-      '支持按成绩排序和统计功能',
-      '提供友好的用户界面',
-      '代码需要有详细注释',
-    ];
-
-    return requirements.map((requirement) => Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.only(top: 6, right: 12),
-            decoration: const BoxDecoration(
-              color: Color(0xFF4285F4),
-              shape: BoxShape.circle,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              requirement,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF666666),
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    )).toList();
-  }
-
-  /// 构建提交格式
-  Widget _buildSubmissionFormat() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '提交格式：',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF333333),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Text(
-            '源代码文件（.cpp/.java）+ 设计文档（.doc/.pdf）+ 运行截图',
-            style: TextStyle(
+          Text(
+            description,
+            style: const TextStyle(
               fontSize: 14,
               color: Color(0xFF666666),
+              height: 1.6,
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  /// 构建截止时间
-  Widget _buildDeadline() {
-    return Row(
-      children: [
-        const Icon(
-          Icons.schedule,
-          color: Color(0xFFFF5722),
-          size: 20,
-        ),
-        const SizedBox(width: 8),
-        const Text(
-          '截止时间：',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF333333),
+          
+          const SizedBox(height: 16),
+          
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule,
+                color: Color(0xFFFF5722),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                '截止时间：',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              Text(
+                deadline,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFFFF5722),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-        ),
-        const Text(
-          '2024年10月25日 23:59',
-          style: TextStyle(
-            fontSize: 16,
-            color: Color(0xFFFF5722),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -636,9 +725,23 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
           
           const SizedBox(height: 16),
           
-          ...List.generate(_references.length, (index) {
-            return _buildReferenceItem(_references[index]);
-          }),
+          if (_references.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  '暂无参考资料',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF999999),
+                  ),
+                ),
+              ),
+            )
+          else
+            ...List.generate(_references.length, (index) {
+              return _buildReferenceItem(_references[index]);
+            }),
         ],
       ),
     );
@@ -754,7 +857,168 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
           
           const SizedBox(height: 20),
           
-          if (!_isSubmitted) ...[
+          if (_isSubmitted) ...[
+            // 已提交状态
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF4CAF50),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF4CAF50),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '已提交',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF4CAF50),
+                              ),
+                            ),
+                            if (_assignmentData?['attemptNumber'] != null)
+                              Text(
+                                '第 ${_assignmentData!['attemptNumber']} 次提交',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF666666),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_assignmentData?['submissionTime'] != null)
+                    Text(
+                      '提交时间: ${_formatSubmissionTime(_assignmentData!['submissionTime'])}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF666666),
+                      ),
+                    ),
+                  if (_assignmentData?['content'] != null && (_assignmentData!['content'] as String).isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      '提交内容:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF333333),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _assignmentData!['content'],
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF666666),
+                      ),
+                    ),
+                  ],
+                  // 显示提交的文件
+                  if (_assignmentData?['submissionAttachments'] != null && 
+                      (_assignmentData!['submissionAttachments'] as List).isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      '提交文件:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF333333),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...(_assignmentData!['submissionAttachments'] as List).map((attachment) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFE0E0E0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.attach_file, size: 20, color: Color(0xFF666666)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    attachment['fileName'] ?? '未知文件',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF333333),
+                                    ),
+                                  ),
+                                  Text(
+                                    _formatFileSize(attachment['fileSize'] ?? 0),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF999999),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => _downloadSubmissionFile(attachment),
+                              icon: const Icon(Icons.download, size: 20, color: Color(0xFF4285F4)),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                  // 重新提交按钮
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _startSubmission,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF4285F4),
+                        side: const BorderSide(color: Color(0xFF4285F4)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      icon: const Icon(Icons.refresh, size: 20),
+                      label: const Text(
+                        '重新提交作业',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -837,140 +1101,180 @@ class _AssignmentDetailPageState extends State<AssignmentDetailPage> {
     );
   }
 
+  /// 格式化提交时间
+  String _formatSubmissionTime(String? timeStr) {
+    if (timeStr == null) return '未知时间';
+    try {
+      final time = DateTime.parse(timeStr);
+      return '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return '未知时间';
+    }
+  }
+
+  /// 下载提交的文件
+  Future<void> _downloadSubmissionFile(Map<String, dynamic> attachment) async {
+    try {
+      await FileUploadService.downloadAssignmentAttachment(
+        attachmentId: attachment['id'],
+        fileName: attachment['fileName'] ?? 'file',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('文件下载成功'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('下载失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   /// 构建提交底部弹窗
   Widget _buildSubmissionSheet() {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // 拖拽指示器
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
+    return StatefulBuilder(
+      builder: (context, setSheetState) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
             ),
-          ),
-          
-          // 标题
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Text(
-              '提交作业',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF333333),
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('提交作业', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF333333))),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _contentController,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        hintText: '请输入作业内容或说明（可选）',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E0E0))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF4285F4))),
+                        contentPadding: const EdgeInsets.all(12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 文件上传区域 - 添加点击事件
+                    GestureDetector(
+                      onTap: () async {
+                        try {
+                          final file = await FileUploadService.pickSingleFile();
+                          if (file != null) {
+                            setSheetState(() => _selectedFiles.add(file));
+                            setState(() {});
+                          }
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('选择文件失败: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: const Color(0xFFE0E0E0), width: 2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.cloud_upload, size: 36, color: Color(0xFF999999)),
+                            SizedBox(height: 8),
+                            Text('点击选择文件上传', style: TextStyle(color: Color(0xFF999999), fontSize: 14)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // 已选择的文件列表
+                    if (_selectedFiles.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: _selectedFiles.length,
+                          itemBuilder: (context, index) {
+                            final file = _selectedFiles[index];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F9FA),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(file.typeIcon, style: const TextStyle(fontSize: 20)),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(file.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                                        Text(file.formattedSize, style: const TextStyle(fontSize: 12, color: Color(0xFF666666))),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: () {
+                                      setSheetState(() => _selectedFiles.removeAt(index));
+                                      setState(() {});
+                                    },
+                                    icon: const Icon(Icons.close, color: Color(0xFF666666), size: 20),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ] else
+                      const Spacer(),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submitAssignment,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4285F4),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+                            : const Text('确认提交', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               ),
             ),
-          ),
-          
-          // 内容区域
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  // 作业内容输入
-                  TextField(
-                    controller: _contentController,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: '请输入作业内容或说明（可选）',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF4285F4)),
-                      ),
-                      contentPadding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // 文件上传区域
-                  Container(
-                    width: double.infinity,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: const Color(0xFFE0E0E0),
-                        style: BorderStyle.solid,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.cloud_upload,
-                          size: 40,
-                          color: Color(0xFF999999),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          '点击或拖拽文件到此处上传',
-                          style: TextStyle(
-                            color: Color(0xFF999999),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // 提交按钮
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isSubmitting ? null : _submitAssignment,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4285F4),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text(
-                              '确认提交',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

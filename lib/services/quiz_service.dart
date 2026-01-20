@@ -204,9 +204,9 @@ class QuizService {
   }
 
   /// 获取教师测验统计
-  Future<QuizOverview> getTeacherQuizOverview(int quizId) async {
+  Future<QuizOverview> getTeacherQuizOverview() async {
     final response = await ApiService.request<Map<String, dynamic>>(
-      '/api/teacher/quizzes/$quizId/overview',
+      '/api/teacher/quizzes/overview',
       method: 'GET',
       fromJson: (json) => json,
     );
@@ -443,6 +443,26 @@ class QuizService {
     } catch (e) {
       return false;
     }
+  }
+
+  /// 获取答卷详情
+  Future<Map<String, dynamic>> getSubmissionDetail({
+    required String token,
+    required int submissionId,
+  }) async {
+    final url = '/api/teacher/quizzes/submissions/$submissionId/detail';
+
+    final response = await ApiService.request<Map<String, dynamic>>(
+      url,
+      method: 'GET',
+      fromJson: (json) => json,
+    );
+
+    return {
+      'error': response.error,
+      'message': response.message,
+      'body': response.body,
+    };
   }
 }
 

@@ -17,10 +17,7 @@ class CourseDetailPage extends StatefulWidget {
   State<CourseDetailPage> createState() => _CourseDetailPageState();
 }
 
-class _CourseDetailPageState extends State<CourseDetailPage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  
+class _CourseDetailPageState extends State<CourseDetailPage> {
   // 数据状态
   Map<String, dynamic>? _courseDetail;
   List<Map<String, dynamic>> _resources = [];
@@ -34,14 +31,7 @@ class _CourseDetailPageState extends State<CourseDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadCourseData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   /// 加载课程数据
@@ -226,14 +216,25 @@ class _CourseDetailPageState extends State<CourseDetailPage>
         // 课程进度
         _buildProgressCard(),
         
-        // 统计信息
-        if (_courseDetail?['statistics'] != null) _buildStatisticsCard(),
+        // 课程资料标题
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: const Row(
+            children: [
+              Text(
+                '课程资料',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
+                ),
+              ),
+            ],
+          ),
+        ),
         
-        // TabBar
-        _buildTabBar(),
-        
-        // TabBarView
-        _buildTabBarView(),
+        // 课程资料列表
+        _buildResourcesList(),
       ],
     );
   }
@@ -386,132 +387,19 @@ class _CourseDetailPageState extends State<CourseDetailPage>
     );
   }
 
-  /// 构建统计信息卡片
-  Widget _buildStatisticsCard() {
-    final stats = _courseDetail!['statistics'];
-    
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '我的学习数据',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF333333),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  '平均成绩',
-                  '${stats['myGrade']?.toStringAsFixed(1) ?? '0'}分',
-                  const Color(0xFF4285F4),
-              ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  '出勤率',
-                  '${stats['myAttendance']?.toStringAsFixed(0) ?? '0'}%',
-                  const Color(0xFF4CAF50),
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  '作业完成',
-                  '${stats['myAssignmentCompletion']?.toStringAsFixed(0) ?? '0'}%',
-                  const Color(0xFFFF9800),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
-  /// 构建统计项
-  Widget _buildStatItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-                  style: const TextStyle(
-            fontSize: 12,
-            color: Color(0xFF666666),
-          ),
-        ),
-      ],
-    );
-  }
 
-  /// 构建TabBar
-  Widget _buildTabBar() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        labelColor: const Color(0xFF4285F4),
-        unselectedLabelColor: const Color(0xFF666666),
-        indicatorColor: const Color(0xFF4285F4),
-        indicatorWeight: 3,
-        tabs: const [
-          Tab(text: '课程资料'),
-          Tab(text: '最近活动'),
-        ],
-      ),
-    );
-  }
-
-  /// 构建TabBarView
-  Widget _buildTabBarView() {
-    return SizedBox(
-      height: 400,
-      child: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildResourcesTab(),
-          _buildActivitiesTab(),
-        ],
-      ),
-    );
-  }
-
-  /// 构建资料标签页
-  Widget _buildResourcesTab() {
+  /// 构建资料列表
+  Widget _buildResourcesList() {
     if (_resources.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -534,13 +422,17 @@ class _CourseDetailPageState extends State<CourseDetailPage>
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _resources.length,
-      itemBuilder: (context, index) {
-        final resource = _resources[index];
-        return _buildResourceItem(resource);
-      },
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _resources.length,
+        itemBuilder: (context, index) {
+          final resource = _resources[index];
+          return _buildResourceItem(resource);
+        },
+      ),
     );
   }
 
@@ -658,167 +550,63 @@ class _CourseDetailPageState extends State<CourseDetailPage>
 
   /// 显示下载对话框
   void _showDownloadDialog(Map<String, dynamic> resource) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('下载 ${resource['title'] ?? resource['fileName']}'),
-        action: SnackBarAction(
-          label: '确定',
-          onPressed: () {},
-        ),
-      ),
-    );
-  }
-
-  /// 构建活动标签页
-  Widget _buildActivitiesTab() {
-    final activities = _courseDetail?['recentActivities'] as List<dynamic>? ?? [];
-
-    if (activities.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.event_note,
-                size: 64,
-                color: Colors.grey[400],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                '暂无最近活动',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('下载资料'),
+        content: Text('确定要下载 ${resource['title'] ?? resource['fileName']} 吗?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
           ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: activities.length,
-      itemBuilder: (context, index) {
-        final activity = activities[index] as Map<String, dynamic>;
-        return _buildActivityItem(activity);
-      },
-    );
-  }
-
-  /// 构建活动项
-  Widget _buildActivityItem(Map<String, dynamic> activity) {
-    final type = activity['type'] ?? '';
-    final title = activity['title'] ?? '';
-    final time = activity['time'] ?? '';
-    final status = activity['status'] ?? '';
-
-    IconData icon;
-    Color iconColor;
-    
-    switch (type) {
-      case 'assignment':
-        icon = Icons.assignment;
-        iconColor = const Color(0xFFFF9800);
-        break;
-      case 'announcement':
-        icon = Icons.campaign;
-        iconColor = const Color(0xFF4285F4);
-        break;
-      case 'quiz':
-        icon = Icons.quiz;
-        iconColor = const Color(0xFF4CAF50);
-        break;
-      default:
-        icon = Icons.event;
-        iconColor = const Color(0xFF666666);
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, color: iconColor, size: 20),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _downloadResource(resource);
+            },
+            child: const Text('确定'),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatActivityTime(time),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF999999),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (status == 'new')
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE53935),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                'NEW',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  /// 格式化活动时间
-  String _formatActivityTime(String timeStr) {
+  /// 下载资料
+  Future<void> _downloadResource(Map<String, dynamic> resource) async {
     try {
-      final time = DateTime.parse(timeStr);
-      final now = DateTime.now();
-      final difference = now.difference(time);
-
-      if (difference.inDays > 0) {
-        return '${difference.inDays}天前';
-      } else if (difference.inHours > 0) {
-        return '${difference.inHours}小时前';
-      } else if (difference.inMinutes > 0) {
-        return '${difference.inMinutes}分钟前';
-      } else {
-        return '刚刚';
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('正在准备下载...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+      
+      await _resourceService.downloadResource(
+        courseId: int.parse(widget.course.id),
+        resourceId: resource['id'],
+        savePath: '', // Web 不需要路径
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('下载完成'),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
-      return timeStr;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('下载失败: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
+
+
 }

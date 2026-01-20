@@ -111,7 +111,7 @@ class AssignmentService {
   }) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/teacher/assignments/$assignmentId/detail'),
+        Uri.parse('$baseUrl/api/student/assignments/$assignmentId/detail'),
         headers: {
           'Content-Type': 'application/json; charset=UTF-8',
           'auth': token,

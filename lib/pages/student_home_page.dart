@@ -145,6 +145,11 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
   /// 构建欢迎卡片
   Widget _buildWelcomeCard() {
+    final studentInfo = _dashboardData?['studentInfo'];
+    final avatarUrl = studentInfo?['avatar'];
+    final name = studentInfo?['name'] ?? '同学';
+    final greeting = studentInfo?['greeting'] ?? '你好';
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -163,10 +168,8 @@ class _StudentHomePageState extends State<StudentHomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _dashboardData?['studentInfo']?['greeting'] != null 
-                    ? '${_dashboardData!['studentInfo']['greeting']}，${_dashboardData!['studentInfo']['name'] ?? '同学'}'
-                    : '你好，同学',
-                  style: TextStyle(
+                  '$greeting，$name',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -190,13 +193,33 @@ class _StudentHomePageState extends State<StudentHomePage> {
               color: Colors.white.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.person,
-              color: Colors.white,
-              size: 24,
+            child: ClipOval(
+              child: avatarUrl != null && avatarUrl.toString().isNotEmpty
+                  ? Image.network(
+                      'http://localhost:8081$avatarUrl',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildDefaultAvatar(name);
+                      },
+                    )
+                  : _buildDefaultAvatar(name),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 构建默认头像
+  Widget _buildDefaultAvatar(String name) {
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name[0] : '学',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -503,6 +526,10 @@ class _StudentHomePageState extends State<StudentHomePage> {
         setState(() {
           _currentIndex = index;
         });
+        // 当切换到首页时，重新加载数据以获取最新的头像
+        if (index == 0) {
+          _loadDashboardData();
+        }
       },
       selectedItemColor: const Color(0xFF4285F4),
       unselectedItemColor: const Color(0xFF999999),

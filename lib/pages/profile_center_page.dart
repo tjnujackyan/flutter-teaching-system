@@ -85,6 +85,9 @@ class _ProfileCenterPageState extends State<ProfileCenterPage> {
 
   /// 构建用户信息卡片
   Widget _buildUserInfoCard() {
+    final avatarUrl = _profileData?['avatar'];
+    final name = _profileData?['name'] ?? '加载中...';
+    
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
@@ -115,10 +118,17 @@ class _ProfileCenterPageState extends State<ProfileCenterPage> {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(40),
                 ),
-                child: const Icon(
-                  Icons.person,
-                  color: Colors.white,
-                  size: 40,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(40),
+                  child: avatarUrl != null && avatarUrl.toString().isNotEmpty
+                      ? Image.network(
+                          'http://localhost:8081$avatarUrl',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildDefaultAvatar(name);
+                          },
+                        )
+                      : _buildDefaultAvatar(name),
                 ),
               ),
               const SizedBox(width: 16),
@@ -127,7 +137,7 @@ class _ProfileCenterPageState extends State<ProfileCenterPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _profileData?['name'] ?? '加载中...',
+                      name,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
@@ -157,23 +167,51 @@ class _ProfileCenterPageState extends State<ProfileCenterPage> {
                   ],
                 ),
               ),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.edit,
-                  color: Colors.white,
-                  size: 20,
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfileInfoPage(),
+                    ),
+                  ).then((result) {
+                    if (result == true) {
+                      // 个人信息更新成功，重新加载数据
+                      _loadProfileData();
+                    }
+                  });
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: 20,
+                  ),
                 ),
               ),
             ],
           ),
-          
         ],
+      ),
+    );
+  }
+
+  /// 构建默认头像
+  Widget _buildDefaultAvatar(String name) {
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name[0] : '学',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 32,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -222,7 +260,12 @@ class _ProfileCenterPageState extends State<ProfileCenterPage> {
                       MaterialPageRoute(
                         builder: (context) => const ProfileInfoPage(),
                       ),
-                    );
+                    ).then((result) {
+                      if (result == true) {
+                        // 个人信息更新成功，重新加载数据
+                        _loadProfileData();
+                      }
+                    });
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFFF0F0F0)),

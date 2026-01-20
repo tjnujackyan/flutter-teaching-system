@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:html' as html show window;
 import '../services/resource_service.dart';
+import '../services/api_service.dart';
 import '../models/resource_models.dart';
 
 /// 资料详情页面
@@ -71,15 +74,12 @@ class _ResourceDetailPageState extends State<ResourceDetailPage> {
     });
 
     try {
-      // 这里应该实现实际的下载逻辑
-      // 由于Flutter Web的限制，这里只是模拟下载进度
-      for (int i = 0; i <= 100; i += 10) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        setState(() {
-          _downloadProgress = i / 100;
-        });
-      }
-
+      final resourceService = ResourceService();
+      await resourceService.downloadResource(
+        courseId: widget.courseId,
+        resourceId: widget.resourceId,
+        savePath: '',
+      );
       _showSuccessSnackBar('下载完成');
     } catch (e) {
       _showErrorSnackBar('下载失败: $e');

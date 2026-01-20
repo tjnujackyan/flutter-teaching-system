@@ -61,6 +61,9 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         if (profileResponse.isSuccess && profileResponse.body != null) {
           _profileData = profileResponse.body as Map<String, dynamic>?;
           print('Debug: [教师首页] 教师信息加载成功: ${_profileData?['name']}');
+          print('Debug: [教师首页] 头像URL: ${_profileData?['avatar']}');
+        } else {
+          print('Debug: [教师首页] 教师信息加载失败');
         }
 
         // 处理课程列表
@@ -200,6 +203,11 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
 
     final teacherName = _profileData?['name'] ?? '老师';
     final courseCount = _courseCount;
+    final avatarUrl = _profileData?['avatar'];
+    
+    print('Debug: [欢迎卡片] 教师姓名: $teacherName');
+    print('Debug: [欢迎卡片] 头像URL: $avatarUrl');
+    print('Debug: [欢迎卡片] 完整profileData: $_profileData');
 
     return Container(
       margin: const EdgeInsets.all(16),
@@ -244,13 +252,49 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
               color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(30),
             ),
-            child: const Icon(
-              Icons.person,
-              color: Colors.white,
-              size: 30,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: avatarUrl != null && avatarUrl.toString().isNotEmpty
+                  ? Image.network(
+                      'http://localhost:8081$avatarUrl',
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        print('Debug: [欢迎卡片] 头像加载失败: $error');
+                        return _buildDefaultAvatar();
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) {
+                          print('Debug: [欢迎卡片] 头像加载成功');
+                          return child;
+                        }
+                        print('Debug: [欢迎卡片] 头像加载中...');
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        );
+                      },
+                    )
+                  : _buildDefaultAvatar(),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 构建默认头像
+  Widget _buildDefaultAvatar() {
+    final name = _profileData?['name'] ?? '教';
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name[0] : '教',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -619,6 +663,10 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
         setState(() {
           _currentIndex = index;
         });
+        // 当切换到首页时，重新加载数据以获取最新的头像
+        if (index == 0) {
+          _loadHomeData();
+        }
       },
       selectedItemColor: const Color(0xFF4CAF50),
       unselectedItemColor: const Color(0xFF999999),

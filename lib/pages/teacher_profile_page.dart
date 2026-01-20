@@ -156,15 +156,17 @@ class _TeacherProfilePageState extends State<TeacherProfilePage> {
                     width: 2,
                   ),
                 ),
-                child: const Center(
-                  child: Text(
-                    '李',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(30),
+                  child: _profileData?['avatar'] != null && _profileData!['avatar'].toString().isNotEmpty
+                      ? Image.network(
+                          'http://localhost:8081${_profileData!['avatar']}',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildDefaultAvatar();
+                          },
+                        )
+                      : _buildDefaultAvatar(),
                 ),
               ),
               
@@ -237,6 +239,21 @@ class _TeacherProfilePageState extends State<TeacherProfilePage> {
               ],
             ),
         ],
+      ),
+    );
+  }
+
+  /// 构建默认头像
+  Widget _buildDefaultAvatar() {
+    final name = _profileData?['name'] ?? '教';
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name[0] : '教',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -382,8 +399,8 @@ class _TeacherProfilePageState extends State<TeacherProfilePage> {
       ),
     ).then((result) {
       if (result == true) {
-        // 个人信息更新成功，刷新页面
-        setState(() {});
+        // 个人信息更新成功，重新加载数据
+        _loadProfileData();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('个人信息更新成功'),

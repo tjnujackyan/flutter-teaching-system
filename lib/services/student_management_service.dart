@@ -20,6 +20,10 @@ class StudentInfo {
   final StudentPerformance? performance;
   final bool? isInCourse;
   final String? matchType;
+  // 学习情况字段
+  final double? assignmentCompletionRate;
+  final double? quizAverageScore;
+  final double? attendanceRate;
 
   StudentInfo({
     required this.id,
@@ -36,6 +40,9 @@ class StudentInfo {
     this.performance,
     this.isInCourse,
     this.matchType,
+    this.assignmentCompletionRate,
+    this.quizAverageScore,
+    this.attendanceRate,
   });
 
   factory StudentInfo.fromJson(Map<String, dynamic> json) {
@@ -56,6 +63,9 @@ class StudentInfo {
         : null,
       isInCourse: json['isInCourse'],
       matchType: json['matchType'],
+      assignmentCompletionRate: (json['assignmentCompletionRate'] ?? json['performance']?['assignmentCompletion'])?.toDouble(),
+      quizAverageScore: (json['quizAverageScore'] ?? json['performance']?['currentScore'])?.toDouble(),
+      attendanceRate: (json['attendanceRate'] ?? json['performance']?['attendanceRate'])?.toDouble(),
     );
   }
 
@@ -75,6 +85,9 @@ class StudentInfo {
       'performance': performance?.toJson(),
       'isInCourse': isInCourse,
       'matchType': matchType,
+      'assignmentCompletionRate': assignmentCompletionRate,
+      'quizAverageScore': quizAverageScore,
+      'attendanceRate': attendanceRate,
     };
   }
 }
@@ -374,6 +387,23 @@ class StudentManagementService {
       debugPrint('从课程移除学生失败: $e');
       rethrow;
     }
+  }
+
+  /// 从课程移除单个学生
+  Future<Map<String, dynamic>> removeStudentFromCourse({
+    required int courseId,
+    required int studentId,
+    String removeType = 'dropout',
+    String? reason,
+    bool sendNotification = true,
+  }) async {
+    return removeStudentsFromCourse(
+      courseId: courseId,
+      studentIds: [studentId.toString()],
+      removeType: removeType,
+      reason: reason,
+      sendNotification: sendNotification,
+    );
   }
 
   /// 获取学生详情

@@ -1,8 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:html' as html show window;
 import '../services/resource_service.dart';
-import '../models/resource_models.dart';
+import '../services/file_upload_service.dart';
+import '../services/api_service.dart';
 import 'resource_detail_page.dart';
 
 /// 课程资料管理页面
@@ -32,9 +33,20 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
   final int _pageSize = 20;
   bool _hasMore = true;
 
+  // 默认分类配置
+  static const List<Map<String, dynamic>> _defaultCategories = [
+    {'key': 'courseware', 'name': '课件资料', 'icon': '📖'},
+    {'key': 'reference', 'name': '参考资料', 'icon': '📚'},
+    {'key': 'template', 'name': '作业模板', 'icon': '📝'},
+    {'key': 'video', 'name': '视频资料', 'icon': '🎥'},
+    {'key': 'code', 'name': '代码资料', 'icon': '💻'},
+    {'key': 'other', 'name': '其他资料', 'icon': '📎'},
+  ];
+
   @override
   void initState() {
     super.initState();
+    _categories = List.from(_defaultCategories); // 先使用默认分类
     _loadCategories();
     _loadResources();
   }
@@ -43,13 +55,17 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
   Future<void> _loadCategories() async {
     try {
       final response = await _resourceService.getResourceCategories();
-      if (response['error'] == 0) {
-        setState(() {
-          _categories = List<Map<String, dynamic>>.from(response['body'] ?? []);
-        });
+      if (response['error'] == 0 && response['body'] != null) {
+        final loadedCategories = List<Map<String, dynamic>>.from(response['body']);
+        if (loadedCategories.isNotEmpty) {
+          setState(() {
+            _categories = loadedCategories;
+          });
+        }
       }
     } catch (e) {
-      _showErrorSnackBar('加载分类配置失败: $e');
+      // 加载失败时使用默认分类，不显示错误
+      debugPrint('加载分类配置失败，使用默认分类: $e');
     }
   }
 
@@ -97,18 +113,13 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
     }
   }
 
-  /// 上传资料
+  /// 上传资料 - 使用跨平台文件选择
   Future<void> _uploadResource() async {
     try {
-      // 选择文件
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
-        allowMultiple: false,
-      );
+      // 使用跨平台文件选择器
+      final file = await FileUploadService.pickSingleFile();
 
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        
+      if (file != null) {
         // 显示上传对话框
         _showUploadDialog(file);
       }
@@ -118,11 +129,11 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
   }
 
   /// 显示上传对话框
-  void _showUploadDialog(File file) {
+  void _showUploadDialog(CrossPlatformFile file) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     final chapterController = TextEditingController();
-    String selectedCategory = _categories.isNotEmpty ? _categories.first['categoryKey'] : 'other';
+    String selectedCategory = _categories.isNotEmpty ? (_categories.first['key'] ?? 'other') : 'other';
     bool isPublic = true;
     bool isDownloadable = true;
 
@@ -144,26 +155,14 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        _resourceService.getFileTypeIcon(file.path.split('.').last),
-                        style: const TextStyle(fontSize: 24),
-                      ),
+                      Text(file.typeIcon, style: const TextStyle(fontSize: 24)),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              file.path.split('/').last,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              _resourceService.formatFileSize(file.lengthSync()),
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
-                              ),
-                            ),
+                            Text(file.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(file.formattedSize, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                           ],
                         ),
                       ),
@@ -175,10 +174,7 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                 // 资料标题
                 TextField(
                   controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: '资料标题 *',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: '资料标题 *', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 16),
                 
@@ -186,50 +182,38 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                 TextField(
                   controller: descriptionController,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: '资料描述',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: '资料描述', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 16),
                 
                 // 分类选择
                 DropdownButtonFormField<String>(
                   value: selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: '资料分类 *',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: '资料分类 *', border: OutlineInputBorder()),
                   items: _categories.map((category) {
+                    final key = category['key'] as String?;
+                    final name = category['name'] as String?;
+                    final icon = category['icon'] as String?;
+                    
                     return DropdownMenuItem<String>(
-                      value: category['categoryKey'],
+                      value: key ?? 'other',
                       child: Row(
                         children: [
-                          Text(
-                            category['icon'] ?? '📎',
-                            style: const TextStyle(fontSize: 16),
-                          ),
+                          Text(icon ?? '📎', style: const TextStyle(fontSize: 16)),
                           const SizedBox(width: 8),
-                          Text(category['categoryName'] ?? '未知'),
+                          Text(name ?? '未知'),
                         ],
                       ),
                     );
                   }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      selectedCategory = value!;
-                    });
-                  },
+                  onChanged: (value) => setState(() => selectedCategory = value!),
                 ),
                 const SizedBox(height: 16),
                 
                 // 章节名称
                 TextField(
                   controller: chapterController,
-                  decoration: const InputDecoration(
-                    labelText: '章节名称',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: '章节名称', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 16),
                 
@@ -241,11 +225,7 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                         title: const Text('公开资料'),
                         subtitle: const Text('学生可见'),
                         value: isPublic,
-                        onChanged: (value) {
-                          setState(() {
-                            isPublic = value!;
-                          });
-                        },
+                        onChanged: (value) => setState(() => isPublic = value!),
                       ),
                     ),
                     Expanded(
@@ -253,11 +233,7 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                         title: const Text('允许下载'),
                         subtitle: const Text('可下载'),
                         value: isDownloadable,
-                        onChanged: (value) {
-                          setState(() {
-                            isDownloadable = value!;
-                          });
-                        },
+                        onChanged: (value) => setState(() => isDownloadable = value!),
                       ),
                     ),
                   ],
@@ -266,17 +242,13 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
             ElevatedButton(
               onPressed: _isUploading ? null : () async {
                 if (titleController.text.trim().isEmpty) {
                   _showErrorSnackBar('请输入资料标题');
                   return;
                 }
-
                 Navigator.pop(context);
                 await _performUpload(
                   file: file,
@@ -289,11 +261,7 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                 );
               },
               child: _isUploading 
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('上传'),
             ),
           ],
@@ -302,9 +270,9 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
     );
   }
 
-  /// 执行上传
+  /// 执行上传 - 使用跨平台文件上传
   Future<void> _performUpload({
-    required File file,
+    required CrossPlatformFile file,
     required String title,
     String? description,
     required String category,
@@ -312,12 +280,10 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
     required bool isPublic,
     required bool isDownloadable,
   }) async {
-    setState(() {
-      _isUploading = true;
-    });
+    setState(() => _isUploading = true);
 
     try {
-      final response = await _resourceService.uploadResource(
+      final response = await FileUploadService.uploadCourseResource(
         courseId: widget.courseId,
         file: file,
         title: title,
@@ -337,9 +303,7 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
     } catch (e) {
       _showErrorSnackBar('上传失败: $e');
     } finally {
-      setState(() {
-        _isUploading = false;
-      });
+      setState(() => _isUploading = false);
     }
   }
 
@@ -378,6 +342,150 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
       } catch (e) {
         _showErrorSnackBar('删除失败: $e');
       }
+    }
+  }
+
+  /// 编辑资料
+  Future<void> _editResource(Map<String, dynamic> resource) async {
+    final titleController = TextEditingController(text: resource['title']);
+    final descriptionController = TextEditingController(text: resource['description'] ?? '');
+    final chapterController = TextEditingController(text: resource['chapterName'] ?? '');
+    String selectedCategory = resource['category'] ?? 'other';
+    bool isPublic = resource['isPublic'] ?? true;
+    bool isDownloadable = resource['isDownloadable'] ?? true;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('编辑资料信息'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: '资料标题 *', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descriptionController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: '资料描述', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  decoration: const InputDecoration(labelText: '资料分类 *', border: OutlineInputBorder()),
+                  items: _categories.map((category) {
+                    final key = category['key'] as String?;
+                    final name = category['name'] as String?;
+                    final icon = category['icon'] as String?;
+                    
+                    return DropdownMenuItem<String>(
+                      value: key ?? 'other',
+                      child: Row(
+                        children: [
+                          Text(icon ?? '📎', style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 8),
+                          Text(name ?? '未知'),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) => setState(() => selectedCategory = value!),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: chapterController,
+                  decoration: const InputDecoration(labelText: '章节名称', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CheckboxListTile(
+                        title: const Text('公开资料'),
+                        value: isPublic,
+                        onChanged: (value) => setState(() => isPublic = value!),
+                      ),
+                    ),
+                    Expanded(
+                      child: CheckboxListTile(
+                        title: const Text('允许下载'),
+                        value: isDownloadable,
+                        onChanged: (value) => setState(() => isDownloadable = value!),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.trim().isEmpty) {
+                  _showErrorSnackBar('请输入资料标题');
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true) {
+      try {
+        final response = await _resourceService.updateResource(
+          resourceId: resource['id'],
+          title: titleController.text.trim(),
+          description: descriptionController.text.trim(),
+          category: selectedCategory,
+          chapterName: chapterController.text.trim(),
+          isPublic: isPublic,
+          isDownloadable: isDownloadable,
+        );
+
+        if (response['error'] == 0) {
+          _showSuccessSnackBar('更新成功');
+          _loadResources(refresh: true);
+        } else {
+          _showErrorSnackBar(response['message'] ?? '更新失败');
+        }
+      } catch (e) {
+        _showErrorSnackBar('更新失败: $e');
+      }
+    }
+  }
+
+  /// 下载资料
+  Future<void> _downloadResource(Map<String, dynamic> resource) async {
+    try {
+      setState(() => _isUploading = true);
+      _showSuccessSnackBar('正在准备下载: ${resource['title']}');
+      
+      if (kIsWeb) {
+        // Web平台使用 API 下载并创建 Blob
+        final response = await _resourceService.downloadResource(
+          courseId: widget.courseId,
+          resourceId: resource['id'],
+          savePath: '', // Web 不需要路径
+        );
+        
+        _showSuccessSnackBar('下载完成');
+      } else {
+        // 移动端下载逻辑
+        _showErrorSnackBar('移动端下载功能待实现');
+      }
+    } catch (e) {
+      _showErrorSnackBar('下载失败: $e');
+    } finally {
+      setState(() => _isUploading = false);
     }
   }
 
@@ -435,22 +543,26 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
                   ),
                   const SizedBox(width: 8),
                   ..._categories.map((category) {
-                    final isSelected = _selectedCategory == category['categoryKey'];
+                    final key = category['key'] as String?;
+                    final name = category['name'] as String?;
+                    final icon = category['icon'] as String?;
+                    final isSelected = _selectedCategory == key;
+                    
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: FilterChip(
                         label: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(category['icon'] ?? '📎'),
+                            Text(icon ?? '📎'),
                             const SizedBox(width: 4),
-                            Text(category['categoryName'] ?? '未知'),
+                            Text(name ?? '未知'),
                           ],
                         ),
                         selected: isSelected,
                         onSelected: (selected) {
                           setState(() {
-                            _selectedCategory = selected ? category['categoryKey'] : null;
+                            _selectedCategory = selected ? key : null;
                           });
                           _loadResources(refresh: true);
                         },
@@ -582,13 +694,13 @@ class _CourseResourcesPageState extends State<CourseResourcesPage> {
           onSelected: (value) {
             switch (value) {
               case 'edit':
-                // TODO: 实现编辑功能
+                _editResource(resource);
                 break;
               case 'delete':
                 _deleteResource(resource);
                 break;
               case 'download':
-                // TODO: 实现下载功能
+                _downloadResource(resource);
                 break;
             }
           },

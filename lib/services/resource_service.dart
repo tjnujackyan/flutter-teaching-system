@@ -1,7 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+
+// Web 平台条件导入
+import 'dart:html' as html show Blob, Url, AnchorElement;
 
 /// 课程资料管理服务
 class ResourceService {
@@ -163,15 +168,90 @@ class ResourceService {
     Function(int, int)? onReceiveProgress,
   }) async {
     try {
-      final response = await _apiService.download(
-        '/api/courses/$courseId/resources/$resourceId/download',
-        savePath,
-        onReceiveProgress: onReceiveProgress,
-      );
-      return savePath;
+      if (kIsWeb) {
+        // Web 平台使用 Blob 下载
+        await _downloadResourceWeb(courseId, resourceId);
+        return 'downloaded';
+      } else {
+        // 移动端使用文件系统下载
+        final response = await _apiService.download(
+          '/api/courses/$courseId/resources/$resourceId/download',
+          savePath,
+          onReceiveProgress: onReceiveProgress,
+        );
+        return savePath;
+      }
     } catch (e) {
       debugPrint('下载课程资料失败: $e');
       rethrow;
+    }
+  }
+
+  /// Web 平台下载资料
+  Future<void> _downloadResourceWeb(int courseId, int resourceId) async {
+    try {
+      // 创建新的 Dio 实例并复制认证头
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiService.baseUrl,
+        headers: {
+          'auth': await _getAuthToken(),
+        },
+      ));
+      
+      final response = await dio.get(
+        '/api/courses/$courseId/resources/$resourceId/download',
+        options: Options(
+          responseType: ResponseType.bytes,
+        ),
+      );
+
+      if (kIsWeb) {
+        // 从响应头获取文件名
+        final contentDisposition = response.headers.value('content-disposition') ?? '';
+        debugPrint('Content-Disposition: $contentDisposition');
+        
+        String fileName = 'download';
+        if (contentDisposition.isNotEmpty) {
+          // 简化的文件名提取
+          final filenameMatch = RegExp(r'filename="?([^";\n]+)"?').firstMatch(contentDisposition);
+          if (filenameMatch != null && filenameMatch.group(1) != null) {
+            fileName = filenameMatch.group(1)!;
+            debugPrint('Extracted filename: $fileName');
+            // URL 解码文件名
+            try {
+              fileName = Uri.decodeComponent(fileName);
+              debugPrint('Decoded filename: $fileName');
+            } catch (e) {
+              debugPrint('Failed to decode filename: $e');
+              // 解码失败则使用原文件名
+            }
+          }
+        }
+
+        debugPrint('Final filename: $fileName');
+        
+        // 创建 Blob 并触发下载
+        final bytes = response.data as List<int>;
+        final blob = html.Blob([bytes]);
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute('download', fileName)
+          ..click();
+        html.Url.revokeObjectUrl(url);
+      }
+    } catch (e) {
+      debugPrint('Web 下载失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 获取认证 token
+  Future<String> _getAuthToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('auth_token') ?? '';
+    } catch (e) {
+      return '';
     }
   }
 
