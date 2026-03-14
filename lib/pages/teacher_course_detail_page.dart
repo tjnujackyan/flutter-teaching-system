@@ -5,6 +5,8 @@ import 'teacher_quiz_create_page.dart';
 import 'teacher_upload_materials_page.dart';
 import 'course_resources_page.dart';
 import 'teacher_student_management_page.dart';
+import 'teacher_announcement_create_page.dart';
+import 'teacher_announcement_list_page.dart';
 
 /// 课程详情页面
 class TeacherCourseDetailPage extends StatefulWidget {
@@ -384,11 +386,17 @@ class _TeacherCourseDetailPageState extends State<TeacherCourseDetailPage> {
           GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
+            crossAxisCount: 3,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 2.5,
+            childAspectRatio: 1.8,
             children: [
+              _buildQuickActionItem(
+                icon: Icons.campaign,
+                label: '发布公告',
+                color: const Color(0xFFEF4444),
+                onTap: () => _navigateToCreateAnnouncement(),
+              ),
               _buildQuickActionItem(
                 icon: Icons.assignment,
                 label: '发布作业',
@@ -412,6 +420,12 @@ class _TeacherCourseDetailPageState extends State<TeacherCourseDetailPage> {
                 label: '学生管理',
                 color: const Color(0xFF8B5CF6),
                 onTap: () => _navigateToStudentManagement(),
+              ),
+              _buildQuickActionItem(
+                icon: Icons.list_alt,
+                label: '公告列表',
+                color: const Color(0xFFEC4899),
+                onTap: () => _navigateToAnnouncementList(),
               ),
             ],
           ),
@@ -470,6 +484,41 @@ class _TeacherCourseDetailPageState extends State<TeacherCourseDetailPage> {
 
 
 
+
+  /// 导航到发布公告页面
+  void _navigateToCreateAnnouncement() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TeacherAnnouncementCreatePage(
+          courseId: widget.courseId,
+          courseName: widget.courseName,
+        ),
+      ),
+    ).then((result) {
+      if (result == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('公告发布成功'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+      }
+    });
+  }
+
+  /// 导航到公告列表页面
+  void _navigateToAnnouncementList() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TeacherAnnouncementListPage(
+          courseId: widget.courseId,
+          courseName: widget.courseName,
+        ),
+      ),
+    );
+  }
 
   /// 导航到发布作业页面
   void _navigateToCreateAssignment() {

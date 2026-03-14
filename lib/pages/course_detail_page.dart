@@ -3,6 +3,7 @@ import 'student_courses_page.dart';
 import 'assignment_center_page.dart';
 import '../services/student_service.dart';
 import '../services/resource_service.dart';
+import '../services/announcement_service.dart';
 
 /// 课程详情页面
 class CourseDetailPage extends StatefulWidget {
@@ -21,6 +22,7 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
   // 数据状态
   Map<String, dynamic>? _courseDetail;
   List<Map<String, dynamic>> _resources = [];
+  List<Announcement> _announcements = [];
   bool _isLoading = true;
   String? _error;
   
@@ -53,10 +55,19 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
 
       final results = await Future.wait([detailFuture, resourcesFuture]);
 
+      // 单独加载公告
+      final announcementsResponse = await AnnouncementService.getCourseAnnouncements(
+        widget.course.id,
+        isPublished: true,
+        page: 0,
+        size: 10,
+      );
+
       if (mounted) {
         setState(() {
-          _courseDetail = results[0];
-          _resources = _parseResources(results[1]);
+          _courseDetail = results[0] as Map<String, dynamic>;
+          _resources = _parseResources(results[1] as Map<String, dynamic>);
+          _announcements = announcementsResponse.body?.announcements ?? [];
           _isLoading = false;
         });
         print('Debug: [课程详情] 数据加载成功');
@@ -64,6 +75,7 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
         print('Debug: [课程详情] 教师姓名: ${_courseDetail?['teacher']}');
         print('Debug: [课程详情] 课程代码: ${_courseDetail?['code']}');
         print('Debug: [课程详情] 上课地点: ${_courseDetail?['classroom']}');
+        print('Debug: [课程详情] 公告数量: ${_announcements.length}');
         print('Debug: [课程详情] 完整数据: $_courseDetail');
       }
     } catch (e) {
@@ -215,6 +227,9 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
         
         // 课程进度
         _buildProgressCard(),
+        
+        // 课程公告
+        if (_announcements.isNotEmpty) _buildAnnouncementsSection(),
         
         // 课程资料标题
         Container(
@@ -387,6 +402,360 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
     );
   }
 
+
+
+  /// 构建公告区域
+  Widget _buildAnnouncementsSection() {
+    return Column(
+      children: [
+        // 公告标题
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: const Row(
+            children: [
+              Icon(Icons.campaign, size: 20, color: Color(0xFF4285F4)),
+              SizedBox(width: 8),
+              Text(
+                '课程公告',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // 公告列表
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _announcements.length,
+            itemBuilder: (context, index) {
+              final announcement = _announcements[index];
+              return _buildAnnouncementItem(announcement);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 构建公告项
+  Widget _buildAnnouncementItem(Announcement announcement) {
+    Color typeColor;
+    IconData typeIcon;
+    
+    switch (announcement.announcementType) {
+      case AnnouncementType.urgent:
+        typeColor = const Color(0xFFE53935);
+        typeIcon = Icons.priority_high;
+        break;
+      case AnnouncementType.important:
+        typeColor = const Color(0xFFFF9800);
+        typeIcon = Icons.star;
+        break;
+      case AnnouncementType.system:
+        typeColor = const Color(0xFF9C27B0);
+        typeIcon = Icons.settings;
+        break;
+      default:
+        typeColor = const Color(0xFF4285F4);
+        typeIcon = Icons.info_outline;
+    }
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: announcement.isPinned ? typeColor.withOpacity(0.3) : Colors.grey[200]!,
+          width: announcement.isPinned ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            _showAnnouncementDetail(announcement);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 标题行
+                Row(
+                  children: [
+                    // 类型图标
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: typeColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(typeIcon, size: 16, color: typeColor),
+                    ),
+                    const SizedBox(width: 8),
+                    
+                    // 标题
+                    Expanded(
+                      child: Text(
+                        announcement.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF333333),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    
+                    // 置顶标签
+                    if (announcement.isPinned)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: typeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '置顶',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: typeColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // 内容预览
+                Text(
+                  announcement.summary.isNotEmpty 
+                      ? announcement.summary 
+                      : announcement.content,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF666666),
+                    height: 1.5,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                
+                const SizedBox(height: 12),
+                
+                // 底部信息
+                Row(
+                  children: [
+                    // 类型标签
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: typeColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        announcement.announcementTypeText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: typeColor,
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(width: 8),
+                    
+                    // 发布时间
+                    Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatPublishTime(announcement.publishTime),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    
+                    const Spacer(),
+                    
+                    // 查看详情
+                    Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400]),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 格式化发布时间
+  String _formatPublishTime(String publishTime) {
+    try {
+      final dateTime = DateTime.parse(publishTime);
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      
+      if (difference.inDays > 7) {
+        return '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')}';
+      } else if (difference.inDays > 0) {
+        return '${difference.inDays}天前';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours}小时前';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes}分钟前';
+      } else {
+        return '刚刚';
+      }
+    } catch (e) {
+      return publishTime;
+    }
+  }
+
+  /// 显示公告详情
+  void _showAnnouncementDetail(Announcement announcement) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 标题栏
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: widget.course.iconColor.withOpacity(0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        announcement.title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF333333),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // 内容区域
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 元信息
+                      Row(
+                        children: [
+                          Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            announcement.teacherName,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            announcement.publishTime,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      const Divider(),
+                      const SizedBox(height: 20),
+                      
+                      // 正文内容
+                      Text(
+                        announcement.content,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Color(0xFF333333),
+                          height: 1.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // 底部按钮
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: Colors.grey[200]!),
+                  ),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.course.iconColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('知道了', style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
 
   /// 构建资料列表
