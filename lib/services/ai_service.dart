@@ -52,6 +52,26 @@ class AIService {
     }
   }
 
+  /// 获取实时统计数据
+  static Future<Map<String, dynamic>> getRealtimeStats({
+    String timeRange = 'week',
+  }) async {
+    try {
+      final response = await _api.get(
+        '/api/ai/analysis/stats/realtime?timeRange=$timeRange',
+      );
+
+      if (response['code'] == 200) {
+        return response['data'] as Map<String, dynamic>;
+      } else {
+        throw Exception(response['message'] ?? '获取统计数据失败');
+      }
+    } catch (e) {
+      print('Error: [AI] 获取实时统计失败: $e');
+      rethrow;
+    }
+  }
+
   /// 获取最新的分析结果
   static Future<AIAnalysisResult?> getLatestAnalysis() async {
     try {

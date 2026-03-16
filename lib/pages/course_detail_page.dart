@@ -73,8 +73,9 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
         print('Debug: [课程详情] 数据加载成功');
         print('Debug: [课程详情] 课程名称: ${_courseDetail?['name']}');
         print('Debug: [课程详情] 教师姓名: ${_courseDetail?['teacher']}');
-        print('Debug: [课程详情] 课程代码: ${_courseDetail?['code']}');
-        print('Debug: [课程详情] 上课地点: ${_courseDetail?['classroom']}');
+        print('Debug: [课程详情] 当前周次: ${_courseDetail?['currentWeek']}');
+        print('Debug: [课程详情] 总周数: ${_courseDetail?['totalWeeks']}');
+        print('Debug: [课程详情] 进度: ${_courseDetail?['progress']}');
         print('Debug: [课程详情] 公告数量: ${_announcements.length}');
         print('Debug: [课程详情] 完整数据: $_courseDetail');
       }
@@ -338,8 +339,8 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
   /// 构建进度卡片
   Widget _buildProgressCard() {
     final progress = _courseDetail?['progress'] ?? widget.course.progress;
-    final completedHours = _courseDetail?['completedHours'] ?? widget.course.completedHours;
-    final totalHours = _courseDetail?['totalHours'] ?? widget.course.totalHours;
+    final currentWeek = _courseDetail?['currentWeek'] ?? widget.course.currentWeek;
+    final totalWeeks = _courseDetail?['totalWeeks'] ?? widget.course.totalWeeks;
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -362,7 +363,7 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                '学习进度',
+                '课程进度',
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -391,7 +392,7 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '已完成 $completedHours/$totalHours 课时',
+            '第 $currentWeek 周 / 共 $totalWeeks 周',
             style: const TextStyle(
               fontSize: 12,
               color: Color(0xFF999999),

@@ -54,11 +54,16 @@ class _TeacherQuizSubmissionDetailPageState
 
       if (response['error'] == 0) {
         final body = response['body'];
+        print('Debug: [答卷详情] 完整响应: $body');
+        print('Debug: [答卷详情] submission数据: ${body['submission']}');
         setState(() {
           _submission = body['submission'] ?? {};
           _answers = List<Map<String, dynamic>>.from(body['answers'] ?? []);
           _isLoading = false;
         });
+        print('Debug: [答卷详情] totalScore: ${_submission['totalScore']}');
+        print('Debug: [答卷详情] correctCount: ${_submission['correctCount']}');
+        print('Debug: [答卷详情] wrongCount: ${_submission['wrongCount']}');
       } else {
         throw Exception(response['message'] ?? '加载失败');
       }

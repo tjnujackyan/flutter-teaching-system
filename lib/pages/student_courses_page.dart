@@ -18,8 +18,8 @@ class Course {
   final String name;
   final String teacher;
   final String department;
-  final int totalHours;
-  final int completedHours;
+  final int totalWeeks;
+  final int currentWeek;
   final CourseStatus status;
   final Color iconColor;
   final IconData iconData;
@@ -30,15 +30,15 @@ class Course {
     required this.name,
     required this.teacher,
     required this.department,
-    required this.totalHours,
-    required this.completedHours,
+    required this.totalWeeks,
+    required this.currentWeek,
     required this.status,
     required this.iconColor,
     required this.iconData,
     required this.studentCount,
   });
 
-  double get progress => totalHours > 0 ? completedHours / totalHours : 0.0;
+  double get progress => totalWeeks > 0 ? currentWeek / totalWeeks : 0.0;
 }
 
 /// 学生课程页面
@@ -158,8 +158,8 @@ class _StudentCoursesPageState extends State<StudentCoursesPage> {
       name: courseData['name'] ?? '',
       teacher: courseData['teacher'] ?? '',
       department: courseData['department'] ?? '',
-      totalHours: courseData['totalHours'] ?? 0,
-      completedHours: courseData['completedHours'] ?? 0,
+      totalWeeks: courseData['totalWeeks'] ?? 16,
+      currentWeek: courseData['currentWeek'] ?? 0,
       status: _mapCourseStatus(courseData['status'] ?? 'pending'),
       iconColor: _parseColor(courseData['iconColor'] ?? '#4285F4'),
       iconData: _parseIconData(courseData['iconData'] ?? 'code'),
@@ -524,7 +524,7 @@ class _StudentCoursesPageState extends State<StudentCoursesPage> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${course.completedHours}/${course.totalHours}学时',
+                        '第${course.currentWeek}周/共${course.totalWeeks}周',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],

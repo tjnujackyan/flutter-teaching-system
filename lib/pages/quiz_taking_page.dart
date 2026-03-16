@@ -704,10 +704,11 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
             itemCount: questions.length,
             itemBuilder: (context, index) {
               final question = questions[index];
-              final status = question.getStatus(_currentQuestionIndex);
+              final globalIndex = widget.questions.indexOf(question);
+              final status = question.getStatus(globalIndex);
               
               return InkWell(
-                onTap: () => _goToQuestion(question.id - 1),
+                onTap: () => _goToQuestion(globalIndex),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   decoration: BoxDecoration(
@@ -716,7 +717,7 @@ class _QuizTakingPageState extends State<QuizTakingPage> {
                   ),
                   child: Center(
                     child: Text(
-                      '${question.id}',
+                      '${globalIndex + 1}',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

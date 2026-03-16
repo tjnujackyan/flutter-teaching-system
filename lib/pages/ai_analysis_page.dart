@@ -13,12 +13,15 @@ class AIAnalysisPage extends StatefulWidget {
 class _AIAnalysisPageState extends State<AIAnalysisPage> {
   bool _isLoading = false;
   AIAnalysisResult? _latestAnalysis;
+  Map<String, dynamic>? _realtimeStats;
+  String _currentTimeRange = 'week';
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
     _loadLatestAnalysis();
+    _loadRealtimeStats();
   }
 
   /// 加载最新的分析
@@ -39,6 +42,18 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
         _errorMessage = '加载失败: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// 加载实时统计数据
+  Future<void> _loadRealtimeStats() async {
+    try {
+      final stats = await AIService.getRealtimeStats(timeRange: _currentTimeRange);
+      setState(() {
+        _realtimeStats = stats;
+      });
+    } catch (e) {
+      print('Error: [AI] 加载实时统计失败: $e');
     }
   }
 
@@ -83,6 +98,9 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
         setState(() {
           _latestAnalysis = result['data'];
         });
+        
+        // 更新实时统计
+        await _loadRealtimeStats();
         
         // 显示成功提示
         ScaffoldMessenger.of(context).showSnackBar(
@@ -138,8 +156,8 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
           child: Column(
             children: [
               _buildQuickAnalysisSection(),
+              _buildDataStatsCard(), // 始终显示统计数据
               if (_latestAnalysis != null) ...[
-                _buildDataStatsCard(),
                 _buildWeakPointsSection(),
                 _buildStrongPointsSection(),
                 _buildSuggestionsCard(),
@@ -173,7 +191,11 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.calendar_today),
                     label: const Text('本周分析'),
-                    onPressed: () => _generateAnalysis('week'),
+                    onPressed: () {
+                      setState(() => _currentTimeRange = 'week');
+                      _loadRealtimeStats();
+                      _generateAnalysis('week');
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -181,7 +203,11 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.calendar_month),
                     label: const Text('本月分析'),
-                    onPressed: () => _generateAnalysis('month'),
+                    onPressed: () {
+                      setState(() => _currentTimeRange = 'month');
+                      _loadRealtimeStats();
+                      _generateAnalysis('month');
+                    },
                   ),
                 ),
               ],
@@ -193,8 +219,11 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
   }
 
   /// 数据统计卡片
+  /// 数据统计卡片
   Widget _buildDataStatsCard() {
-    final stats = _latestAnalysis!.dataStats;
+    // 优先使用实时统计数据，如果没有则使用历史分析数据
+    final stats = _realtimeStats ?? _latestAnalysis?.dataStats ?? {};
+    final timeRangeText = _currentTimeRange == 'week' ? '本周' : '本月';
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -204,16 +233,16 @@ class _AIAnalysisPageState extends State<AIAnalysisPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '📈 学习数据统计 (${_latestAnalysis!.timeRange == 'week' ? '本周' : '本月'})',
+              '📈 学习数据统计 ($timeRangeText)',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('测验', '${stats['quizCount']}次'),
-                _buildStatItem('作业', '${stats['assignmentCount']}次'),
-                _buildStatItem('准确率', '${stats['accuracy']}%'),
+                _buildStatItem('测验', '${stats['quizCount'] ?? 0}次'),
+                _buildStatItem('作业', '${stats['assignmentCount'] ?? 0}次'),
+                _buildStatItem('准确率', '${(stats['accuracy'] ?? 0).toStringAsFixed(0)}%'),
               ],
             ),
           ],

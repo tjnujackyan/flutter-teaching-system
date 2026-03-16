@@ -637,7 +637,7 @@ class _TeacherAssignmentGradingPageState extends State<TeacherAssignmentGradingP
               border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Text(
-              submission['description'] ?? '学生提交了作业，等待批改。',
+              submission['content'] ?? '学生未填写文字说明',
               style: const TextStyle(
                 fontSize: 12,
                 color: Color(0xFF333333),
